@@ -1,0 +1,48 @@
+---
+- name: Install Site24x7 server monitoring agent
+  hosts: "{{ hostList }}"
+  become: yes
+  become_user: root
+
+  vars:
+    device_key: "{{ deviceKey }}"
+    proxy: NONE
+
+  tasks:
+    - name: Check if Site24x7 agent exists
+      stat:
+        path: /opt/site24x7/monagent
+      register: installed
+
+    - block:
+        - name: Download Site24x7 agent
+          get_url:
+            url: "https://staticdownloads.site24x7.com/server/Site24x7_Linux_{{ ansible_architecture }}.install"
+            dest: "/opt/Site24x7_Linux_{{ ansible_architecture }}.install"
+            mode: 0750
+          when: not installed.stat.exists
+          async: 300
+          poll: 0
+
+        - name: Install Site24x7 agent
+          shell: >
+            /opt/Site24x7_Linux_{{ ansible_architecture }}.install
+            -i -key={{ device_key }}
+            -installer=ansible
+            {% if proxy != "NONE" %} -proxy={{ proxy }} {% endif %}
+          when: not installed.stat.exists
+          async: 300
+          poll: 0
+
+        - name: Restart Site24x7 agent service
+          service:
+            name: site24x7monagent
+            state: restarted
+          when: not installed.stat.exists
+
+        - name: Delete installer file
+          file:
+            state: absent
+            path: "/opt/Site24x7_Linux_{{ ansible_architecture }}.install"
+          when: not installed.stat.exists
+      when: ansible_architecture in ["x86_64", "i386"]
